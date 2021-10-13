@@ -1,0 +1,174 @@
+---
+title: "CMS MA 2022 Filing"
+output: html_document
+---
+
+```{r LibrarySetup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+tdy <- format(as.Date(Sys.Date()),"%B %d, %Y")
+library(readr)
+library(tidyverse)
+library(readxl)
+library(janitor)
+#Negate
+`%!in%` = Negate(`%in%`)
+```
+
+# 2022 Medicare Benefits
+
+Today's Date is `r tdy`.
+The purpose of this document is to provide insight into the approved Medicare Advantage benefits for all organizations that submit a bid.  This information is all sourced from the Centers for Medicare & Medicaid Services website <https://www.cms.gov/>.
+Specifically this information has been sourced from the Research, Statistics, Data & Systems page <https://www.cms.gov/Research-Statistics-Data-and-Systems/Research-Statistics-Data-and-Systems>.  
+
+### **Data Contents**
+
+##### **Monthly Enrollment Information**
+This file provides monthly enrollment at the contract/plan/state/county level for all organization types.  
+Obtained from <https://www.cms.gov/Research-Statistics-Data-and-Systems/Statistics-Trends-and-Reports/MCRAdvPartDEnrolData/Monthly-Enrollment-by-Contract-Plan-State-County>
+
+The two main files included in this are:  
+
+##### CPSC_Contract_Info_YYYY_MM.csv.  Columns include:  
+
+* Contract ID - [text] - The contract identifier
+* Plan ID - [text] - The plan identifier
+* Organization Type - [text] - The type of contract held by the organization with CMS
+* Plan Type  - [text] - The type of plan offered to beneficiaries
+* Offers Part D - [text] - "Yes" = offers Part D benefit, "No" = does not offer Part D benefit
+* SNP Plan - [text] - "Yes" = Special Needs Plan, "No" = not a Special Needs Plan
+* EGHP - [text] - "Yes" = Employer Group Health Plan, "No" = not an Employer Group Health Plan 
+* Organization Name - [text] - The name of the organization
+* Organization Marketing Name - [text] - The name of the organization markets to beneficiaries
+* Plan Name - [text] - The name of the plan created by the organization
+* Parent Organization - [text] - the name of the parent organization for this contract
+* Contract Effective Date - [date/time] - the data the contract began with CMS (in mm/dd/yyyy h:mm format) 
+  
+##### CPSC_Enrollment_YYYY_MM.csv Columns include:
+
+* Contract ID - [text] - The contract identifier 
+* Plan ID - [text] - The plan identifier
+* SSA Code - [text] - The Social Security state/county code
+* FIPS Code - [text] - The American National Standards Institue (ANSI) state/county code
+* State - [text] - The two letter postal code for the state
+* county - [text] - The name of the county
+* Enrollment - [text] - Number of beneficiaries enrolled in the contract/plan/state/county (* = 10 or less)
+
+##### **Quarterly Plan Benefit Package** 
+Obtained from <https://www.cms.gov/Research-Statistics-Data-and-Systems/Statistics-Trends-and-Reports/MCRAdvPartDEnrolData/Benefits-Data>
+
+This file contains the following, with all pbp_ files below being specific to benefits.  The meal benefit fiel that we will focus on is pbp_b13_other_services.txt, which includes those "other" services.
+
+* The PlanArea.txt file is available for Local MA and EDPDP-FB plans; the PlanRegionArea.txt file is available for Regional MA plans and PDPs.
+
+1. pbp_SectionA.txt - Contains general plan information.
+2. pbp_b1a_inpat_hosp.txt, pbp_b1b_inpat_hosp.txt - Inpatient Hospital Acute/Psychiatric data.
+3. pbp_b2_snf.txt - Skilled Nursing Facility data.
+4. pbp_b3_cardiac_rehab.txt - Cardiac and Pulmonary Rehabilitation data.
+5. pbp_b4_emerg_urgent.txt - Emergency/Urgent Care data.
+6. pbp_b5_partial_hosp.txt - Partial Hospitalization data.
+7. pbp_b6_home_health.txt - Home Health data.
+8. pbp_b7_health_prof.txt - Contains Health Care Professional data for Primary Care Physician, Chiropractic, occupational Therapy, Physician Specialist and Mental Health Specialist services.
+9. pbp_b8_clin_diag_ther.txt - Outpatient Clinical, Diagnostic, and Therapeutic Radiology services data.
+10. pbp_b9_outpt_hosp.txt - Outpatient Hospital, ASC, Outpatient Substance Abuse, and Cardiac Rehabilitation data.
+11. pbp_b10_amb_trans.txt - Ambulance/Transportation data.
+12.pbp_b11_dme_prosth_orth_sup.txt - Durable Medical Equipment, Prosthetics/Orthotics and Medical Supplies data.
+13. pbp_b12_renal_dialysis.txt - Renal Dialysis data.
+14. pbp_b13_other_services.txt - Outpatient Blood, Acupuncture and "Other" services data. The "Other" data describes benefits not included in standard PBP service categories.
+15. pbp_b14_preventive.txt - Contains Preventive Services data for Health Education/Wellness, Immunizations, Routine Physicals, and Pap/Pelvic Exams.
+16. pbp_b15_partb_rx_drugs.txt -  Medicare Part B prescription drugs.
+17. pbp_b16_dental.txt - Preventive and Comprehensive Dental data.
+18. pbp_b17_eye_exams_wear.txt - Eye Exams and Eye Wear data.
+19. pbp_b18_hearing_exams_aids.txt - Hearing Exams and Hearing Aids data.
+20. pbp_b20.txt - Contains enhanced Prescription Drug data for Cost Plans if they do NOT offer Part D drug benefits.
+21. pbp_Section_C.txt - Contains Out-of-Network data for PPO plans.
+22. pbp_section_c_oon.txt - Out-of-Network
+23. pbp_section_c_pos.txt - Point of Service
+24. pbp_Section_D.txt - Contains plan-level financial data such as plan premiums, global max plan benefit and out-of-pocket limits, and global deductibles.
+25. pbp_section_D_oon.txt - Contains plan-level out-of-network deductibles and out-of-pocket limits.
+26. pbp_Section_D_opt.txt - Contains plan-level benefit data descriptions of optional supplemental offerings including the optional benefit premium amounts.
+27. pbp_mrx.txt - Contains Medicare Part D prescription drug benefits data.
+28. pbp_mrx_gapCoverage.txt - Contains information on coverage of either tier(s) or specific drugs through the entire gap (ICL to catastrophic).
+29. pbp_mrx_p.txt - Contains Medicare Part D prescription drug benefits (post OOP threshold) data.
+30. pbp_mrx_tier.txt - Contains Medicare Part D prescription drug benefits (tiering) data.
+31. pbp_step10b.txt - Contains step-up transportation benefit data.
+32. pbp_step16a.txt - Contains step-up preventive dental data.
+33. pbp_step16b.txt - Contains step-up comprehensive data.
+34. pbp_step17a.txt - Contains step-up eye exams data.
+35. pbp_step17b.txt - Contains step-up eye wear data.
+36. pbp_step18a.txt - Contains step-up hearing exams data.
+37. pbp_step18b.txt - Contains step-up hearing aids data.
+38. pbp_step7b.txt - Contains step-up chiropractic benefit data.
+39. pbp_step7f.txt - Contains step-up podiatry benefit data.
+
+* planarea.txt and planRegionArea.txt - Contains Service Area data by plan (includes EGHP service areas).
+
+*If you are importing the data into Excel, you must define certain columns as text or you will lose any leading zero information (example, a plan id of '001' will 
+appear as '1' if defined as "general" or "numeric.").  The variable names for the columns that should be delineated as text (or character in SAS terminology) are 
+provided within the SAS input statements as well as the PBP_Benefits_2022_dictionary.xlsx.*  
+
+*The CY 2022 PBP Benefits file provides the universe of PBP data for all active contracts and contains all the approved benefit and financial data submitted as part of the CY 2022 Bid Submission by Medicare Advantage and Part D organizations, including those involved in certain demonstration projects and cost plans. The PBP Benefits file is updated quarterly.*
+
+
+##### STARS RATINGS <https://www.cms.gov/medicare/prescription-drug-coverage/prescriptiondrugcovgenin/performancedata.html>  
+The MA star ratings data are available as part of the Part C and D Performance Data. The data are not in a good analytical format and the variable names differ over time. In the associated code files, I've renamed variables so that sufficiently similar data are given the same name across all years of data
+
+```{r Load Enrollment Info, echo=FALSE}
+y <- 2021 ## Year 
+m <- "09" ## Month of Enrollment
+
+enrollment.path <- paste0("C:/Users/eyankowski/OneDrive - momsmeals.com\\MM\\CMS\\CPSC\\CPSC_Enrollment_",y,"_",m,"\\")
+
+ContractInfo   <- paste0(enrollment.path,"CPSC_Contract_Info_",y,"_",m,".csv")
+CPSC_Contract_Info <- read_csv(ContractInfo,
+  col_types = cols(`Contract Effective Date` = col_date(format = "%m/%d/%Y")))%>%
+  clean_names()%>%
+  mutate(LINK=str_c(contract_id,plan_id,sep = "_"))
+
+
+EnrollmentInfo <- paste0(enrollment.path,"CPSC_Enrollment_Info_",y,"_",m,".csv")
+CPSC_Enrollment_Info <- read_csv(EnrollmentInfo,
+  col_types = cols(Enrollment = col_number(),
+  `Plan ID`=col_character()))%>%
+  clean_names()%>% replace_na(list(enrollment = 0))%>%
+  mutate(LINK=str_c(contract_number,plan_id,sep = "_"))
+
+PlanEnrollment <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)
+
+UHC <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(organization_marketing_name=='UnitedHealthcare')
+
+UHC.contract <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(organization_marketing_name=='UnitedHealthcare')%>%
+  group_by(contract_id)%>%
+  summarize(TotalEnrollment=sum(TotalMembers))%>%
+  arrange(TotalMembers)
+
+Humana <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(organization_marketing_name=='Humana')
+
+Aetna <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(organization_marketing_name=='Aetna Medicare')
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
