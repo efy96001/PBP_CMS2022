@@ -7,14 +7,32 @@ pbp_b13_other_services <- read_delim("C:/Users/eyankowski/OneDrive - momsmeals.c
 
 p <- pbp_b13_other_services %>% filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R1548')
 
-##Meal Benefits
-s <- pbp_b13_other_services %>% #filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R1548')%>%
-  select(pbp_a_hnumber,pbp_a_plan_identifier,segment_id,pbp_b13c_meal_type_chk,pbp_b13c_bendesc_service,
+
+pbp_b13ALLCHARACTER <- data.frame(data.table::fread("C:/Users/eyankowski/OneDrive - momsmeals.com/MM/CMS/PBPData/2022/PBP_Benefits_2022/pbp_b13_other_services.txt", 
+                          colClasses = 'character', stringsAsFactors = FALSE))
+
+allcharacter <- pbp_b13ALLCHARACTER %>% filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R1548')
+
+# %>%
+#   select(pbp_a_hnumber,pbp_a_plan_identifier,segment_id,pbp_b13c_meal_type_chk,pbp_b13c_bendesc_service,
+#          pbp_b13c_meal_type_chk
+#          ,pbp_b13c_maxplan_amt,pbp_b13c_maxplan_yn,
+#          pbp_b13c_maxplan_per)
+
+allCharT <- as_data_frame(t(allcharacter))
+write.table(allCharT, "clipboard", sep="\t", row.names=FALSE, col.names=TRUE)
+
+
+##Meal Benefits 
+s <- pbp_b13_other_services %>% filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R1548')%>%
+  select(pbp_a_hnumber,pbp_a_plan_identifier,segment_id,pbp_b13c_meal_type_chk,
+         pbp_b13c_bendesc_service,pbp_b13c_bendesc_amo,
          pbp_b13c_meal_type_chk
          ,pbp_b13c_maxplan_amt,pbp_b13c_maxplan_yn,
          pbp_b13c_maxplan_per)%>%
   mutate(CPBP=paste0(pbp_a_hnumber,"_",pbp_a_plan_identifier,"_",segment_id),
          Meals=if_else(pbp_b13c_bendesc_service==1,"Yes","No"),
+         Option=if_else(pbp_b13c_bendesc_amo==2,"Mandatory","Optional"),
          Type=case_when(
            pbp_b13c_meal_type_chk=='001'~"Chronic Illness",#93
            pbp_b13c_meal_type_chk=='010'~"Post Discharge",#2,032
@@ -24,6 +42,10 @@ s <- pbp_b13_other_services %>% #filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R
            pbp_b13c_meal_type_chk=='110'~"Medical Condition or PD",#72
            pbp_b13c_meal_type_chk=='111'~"Medical Condition_PD_CC"#177
          ))
+
+sWIthMeals <- s %>% filter(Meals=='Yes')
+table(sWIthMeals$Type)
+
 
 countSUM <- s %>%
   group_by(CPBP)%>%
@@ -86,11 +108,17 @@ pbp_Section_A <- read_delim("C:/Users/eyankowski/OneDrive - momsmeals.com/MM/CMS
                                                        ,pbp_a_special_need_flag
                                                        ,pbp_a_special_need_plan_type
                                                        ,pbp_a_dsnp_zerodollar
-                                                       ,pbp_a_snp_cond
+                                                       ,pbp_a_snp_cond,
+                                                       pbp_a_snp_institutional_type,pbp_a_est_memb
+
                                                        ,pbp_a_snp_state_cvg_yn)
 
 pbp_Section_A.clean <- pbp_Section_A %>%
-  mutate(TYPE=case_when(
+  mutate(SNP=if_else(pbp_a_special_need_flag==1,"Yes","No"),
+         SNPType=case_when(pbp_a_special_need_plan_type==1~"Institutional",
+                           pbp_a_special_need_plan_type==3~"Dual-Eligible",
+                           pbp_a_special_need_plan_type==4~"Chronic or Disabling Condition"),
+         TYPE=case_when(
     pbp_a_plan_type...5 %in% c("01","02","03","04","05","07","08","09",
                                "31","32","42","43","44","45","48","49")~"MA",#93
     pbp_a_plan_type...5=='29'~"Drug Plan",
@@ -98,9 +126,43 @@ pbp_Section_A.clean <- pbp_Section_A %>%
     pbp_a_plan_type...5=='20'~"National Pace",
     pbp_a_plan_type...5=='30'~"Employer_Union Direct Contact PDP",
     pbp_a_plan_type...5=='40'~"Employer_Union Direct Contact FFS",
-    pbp_a_plan_type...5=='47'~"Employer Direct PPO"))
+    pbp_a_plan_type...5=='47'~"Employer Direct PPO"),#20 DIGITS EACH
+    ChronicConditions=case_when(pbp_a_snp_cond=="00000000000000000001"~"Cardiovascular Disorders and/or Stroke", #20
+                                pbp_a_snp_cond=="00000000000000000010"~"Cardiovascular Disorders, Chronic Heart Failure, and/or Diabetes", #19
+                                pbp_a_snp_cond=="00000000000000000100"~"Chronic Heart Failure and/or Diabetes",#18
+                                pbp_a_snp_cond=="00000000000000001000"~"Cardiovascular Disorders and/or Diabetes",#17
+                                pbp_a_snp_cond=="00000000000000010000"~"Cardiovascular Disorders and/or Chronic Heart Failure",#16
+                                pbp_a_snp_cond=="00000000000000100000"~"Stroke",#15
+                                pbp_a_snp_cond=="00000000000001000000"~"Neurologic disorders",#14
+                                pbp_a_snp_cond=="00000000000010000000"~"Chronic and disabling mental health conditions",#13
+                                pbp_a_snp_cond=="00000000000100000000"~"Chronic lung disorders",#12
+                                pbp_a_snp_cond=="00000000001000000000"~"HIV/AIDS",#11
+                                pbp_a_snp_cond=="00000000010000000000"~"Severe hematologic disorders",#10
+                                pbp_a_snp_cond=="00000000100000000000"~"Dialysis Services requiring dialysis (any mode of dialysis)",#9
+                                pbp_a_snp_cond=="00000001000000000000"~"End-stage liver disease",#8
+                                pbp_a_snp_cond=="00000010000000000000"~"Diabetes mellitus",#7
+                                pbp_a_snp_cond=="00000100000000000000"~"Dementia",#6
+                                pbp_a_snp_cond=="00001000000000000000"~"Chronic heart failure",#5
+                                pbp_a_snp_cond=="00010000000000000000"~"Cardiovascular disorders",#4
+                                pbp_a_snp_cond=="00100000000000000000"~"Cancer excluding pre-cancer conditions or in-situ status",#3
+                                pbp_a_snp_cond=="01000000000000000000"~"Autoimmune disorders",#2
+                                pbp_a_snp_cond=="100000000000000000000"~"Chronic alcohol and other drug dependence",#1,
+                                pbp_a_snp_cond=="00011010000000000000"~"Cardiovascular_Chronic Heart Failure_Diabetes",))%>%
+  select(pbp_a_hnumber,pbp_a_plan_identifier...2,pbp_a_contract_number,pbp_a_segment_id,
+         pbp_a_plan_geog_name,pbp_a_plan_name,pbp_a_est_memb,
+         SNP,SNPType,TYPE,ChronicConditions)
+
+Insti <- pbp_Section_A.clean %>% #TARGET FOR PEOPLE LIVING IN INSTITUTIONS 
+  filter(pbp_a_snp_institutional_type==2)
 
 
 secAslice <- pbp_Section_A %>%
   filter(pbp_a_hnumber=='H0169'|pbp_a_hnumber=='R1548')
 
+
+#Section C
+pbp_Section_C <- read_delim("C:/Users/eyankowski/OneDrive - momsmeals.com/MM/CMS/PBPData/2022/PBP_Benefits_2022/pbp_Section_C.txt", 
+          delim = "\t", escape_double = FALSE, 
+          trim_ws = TRUE)
+
+OONTest <- pbp_Section_C %>% select(pbp_c_oon_nmc_bendesc_cats)
