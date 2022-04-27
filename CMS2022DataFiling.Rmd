@@ -21,6 +21,15 @@ Today's Date is `r tdy`.
 The purpose of this document is to provide insight into the approved Medicare Advantage benefits for all organizations that submit a bid.  This information is all sourced from the Centers for Medicare & Medicaid Services website <https://www.cms.gov/>.
 Specifically this information has been sourced from the Research, Statistics, Data & Systems page <https://www.cms.gov/Research-Statistics-Data-and-Systems/Research-Statistics-Data-and-Systems>.  
 
+In order to match with some of the published documentation regarding MA plans, we are only excluding the following plan types:
+* Employer Group Health Plans (EGHPs)
+* Prescription Drug Plans (PDPs)
+* Medicare-Medicaid Plans (MMPs)
+* Part B-only plans
+* PACE plans
+
+<https://atiadvisory.com/wp-content/uploads/2022/04/Data-Insight-Growth-in-New-Non-Medical-Benefits-Since-Implementation-of-the-CHRONIC-Care-Act.pdf>
+
 ### **Data Contents**
 
 ##### **Monthly Enrollment Information**
@@ -110,12 +119,11 @@ provided within the SAS input statements as well as the PBP_Benefits_2022_dictio
 *The CY 2022 PBP Benefits file provides the universe of PBP data for all active contracts and contains all the approved benefit and financial data submitted as part of the CY 2022 Bid Submission by Medicare Advantage and Part D organizations, including those involved in certain demonstration projects and cost plans. The PBP Benefits file is updated quarterly.*
 
 
-##### STARS RATINGS <https://www.cms.gov/medicare/prescription-drug-coverage/prescriptiondrugcovgenin/performancedata.html>  
-The MA star ratings data are available as part of the Part C and D Performance Data. The data are not in a good analytical format and the variable names differ over time. In the associated code files, I've renamed variables so that sufficiently similar data are given the same name across all years of data
+
 
 ```{r Load Enrollment Info, echo=FALSE, message=FALSE}
-y <- 2021 ## Year 
-m <- "10" ## Month of Enrollment
+y <- 2022 ## Year 
+m <- "04" ## Month of Enrollment
 
 enrollment.path <- paste0("C:/Users/eyankowski/OneDrive - momsmeals.com\\MM\\CMS\\CPSC\\CPSC_Enrollment_",y,"_",m,"\\")
 
@@ -133,42 +141,84 @@ CPSC_Enrollment_Info <- read_csv(EnrollmentInfo,
   clean_names()%>% replace_na(list(enrollment = 0))%>%
   mutate(LINK=str_c(contract_number,plan_id,sep = "_"))
 
+CPCS_Duplicates <- CPSC_Enrollment_Info%>%
+  group_by(LINK)%>%
+  summarise(n=n())%>%
+  filter(n>1)%>%
+  arrange(-n)
+
+#Just types
+TypesOfPlans <- CPSC_Contract_Info %>%
+  group_by(organization_type)%>%
+  summarize(n=n())
+PlanTypes <- CPSC_Contract_Info %>%
+  group_by(plan_type)%>%
+  summarize(n=n())
+
+#Types with enrollment
+TypesOfPlans.withEnrollment <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  group_by(plan_type)%>%
+  summarize(Count=n(),
+            Membership=sum(TotalMembers))%>%
+  arrange(-Count)
+
 PlanLevelEnrollment <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
+  #filter(organization_type !='Medicare Prescription Drug Plan')%>%#EXCLUDES DRUG PLANS
   select(LINK,TotalMembers,contract_id,plan_id,snp_plan,eghp,
          organization_name,organization_marketing_name,plan_name,parent_organization)%>%
   mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))
 
+#Validated below against https://www.kff.org/medicare/issue-brief/medicare-advantage-in-2021-enrollment-update-and-key-trends/ to determine the breakdown by MA enrollees. They are in 3 buckets, EGHP, SNP and Individual Plans
 EnrollmentByType <- PlanLevelEnrollment %>%
   group_by(PlanType)%>%
   summarise(Enrollment=sum(TotalMembers))%>%
+  mutate(Perc=Enrollment/sum(Enrollment))%>%
   adorn_totals()
-
+  
 OverallEnrollment <- PlanLevelEnrollment %>% #prescription drug plans removed above
   group_by(organization_marketing_name)%>%
   summarise(Enrollment=sum(TotalMembers))%>%
   arrange(desc(Enrollment))%>%
   adorn_totals()
 
+TotalMAEnrollment <- PlanLevelEnrollment %>% #prescription drug plans removed above
+  summarise(Enrollment=sum(TotalMembers))
+
+# DrugPlanEnrollment <- CPSC_Enrollment_Info %>%
+#   group_by(LINK)%>%
+#   summarise(TotalMembers=sum(enrollment))%>%
+#   left_join(CPSC_Contract_Info)%>%
+#   filter(organization_type =='Medicare Prescription Drug Plan')%>%#EXCLUDES DRUG PLANS
+#   #select(LINK,TotalMembers,contract_id,plan_id,snp_plan,eghp,
+#    #      organization_name,organization_marketing_name,plan_name,parent_organization)
+#   summarize(TotalDrugMembership=sum(TotalMembers))
+  
 Top10Plans <- OverallEnrollment %>%
   slice(1:10)
 Top10Plans.v <- as.vector(Top10Plans$organization_marketing_name)
+Top30Plans <- OverallEnrollment %>%
+  slice(1:30)
+Top30Plans.v <- as.vector(Top30Plans$organization_marketing_name)
 
 ```
 
 
 ```{r Health Plan Level, echo=FALSE, message=FALSE}
-
-
 UHC <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='UnitedHealthcare')%>%
   mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))%>%
@@ -177,12 +227,12 @@ UHC <- CPSC_Enrollment_Info %>%
   summarise(Enrollment=sum(TotalMembers))%>%
   adorn_totals()
 
-
 UHC.contract <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='UnitedHealthcare')%>%
   group_by(contract_id)%>%
   summarize(TotalEnrollment=sum(TotalMembers))%>%
@@ -192,7 +242,8 @@ UHC.type <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='UnitedHealthcare')%>%
    mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))%>%
@@ -204,7 +255,8 @@ Humana <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='Humana')%>%
   mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))%>%
@@ -216,14 +268,16 @@ Aetna <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='Aetna Medicare')
 
 Aetna.type <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
   filter(organization_marketing_name=='Aetna Medicare')%>%
   mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))%>%
@@ -237,16 +291,55 @@ major_plans <- CPSC_Enrollment_Info %>%
   group_by(LINK)%>%
   summarise(TotalMembers=sum(enrollment))%>%
   left_join(CPSC_Contract_Info)%>%
-  filter(organization_type !='Medicare Prescription Drug Plan')%>%
-  filter(organization_marketing_name %in% Top10Plans.v)%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
+  filter(organization_marketing_name %in% Top30Plans.v)%>%
   #filter(organization_marketing_name %in% c('Humana','Aetna Medicare','UnitedHealthcare'))%>%
   mutate(PlanType=if_else(eghp=="Yes","Group",
                       if_else(snp_plan=="Yes","SNP","MAPD")))%>%
   group_by(PlanType,organization_marketing_name)%>%
-  summarise(Enrollment=sum(TotalMembers))%>%
+  summarise(Enrollment=sum(TotalMembers,na.rm = T))%>%
   pivot_wider(names_from = organization_marketing_name,
-              values_from = Enrollment)%>%
+              values_from = Enrollment, values_fill = 0)%>%
   adorn_totals()
+
+major_plans.tall <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
+  #filter(organization_marketing_name %in% Top30Plans.v)%>%
+  #filter(organization_marketing_name %in% c('Humana','Aetna Medicare','UnitedHealthcare'))%>%
+  mutate(PlanType=if_else(eghp=="Yes","Group",
+                      if_else(snp_plan=="Yes","SNP","MAPD")))%>%
+  group_by(organization_marketing_name,PlanType)%>%
+  summarise(Enrollment=sum(TotalMembers,na.rm = T))%>%
+   pivot_wider(names_from = PlanType,
+              values_from = Enrollment, values_fill = 0)%>%
+  mutate(Total=Group+MAPD+SNP)%>%
+  arrange(-Total)%>%
+  adorn_totals()
+#write.table(major_plans.tall, "clipboard", sep="\t", row.names=FALSE, col.names=TRUE)
+
+major_plans.tall.parent <- CPSC_Enrollment_Info %>%
+  group_by(LINK)%>%
+  summarise(TotalMembers=sum(enrollment))%>%
+  left_join(CPSC_Contract_Info)%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
+  #filter(organization_marketing_name %in% Top30Plans.v)%>%
+  #filter(organization_marketing_name %in% c('Humana','Aetna Medicare','UnitedHealthcare'))%>%
+  mutate(PlanType=if_else(eghp=="Yes","Group",
+                      if_else(snp_plan=="Yes","SNP","MAPD")))%>%
+  group_by(parent_organization,PlanType)%>%
+  summarise(Enrollment=sum(TotalMembers,na.rm = T))%>%
+   pivot_wider(names_from = PlanType,
+              values_from = Enrollment, values_fill = 0)%>%
+  mutate(Total=Group+MAPD+SNP)%>%
+  arrange(-Total)%>%
+  adorn_totals()
+#write.table(major_plans.tall.parent, "clipboard", sep="\t", row.names=FALSE, col.names=TRUE)
 
 ```
 
@@ -316,6 +409,7 @@ SectionA  <- read_delim(SectionA_Info,
                                 pbp_a_snp_cond=="01000000000000000000"~"Autoimmune disorders",#2
                                 pbp_a_snp_cond=="100000000000000000000"~"Chronic alcohol and other drug dependence",#1,
                                 pbp_a_snp_cond=="00011010000000000000"~"Cardiovascular_Chronic Heart Failure_Diabetes",))%>%
+  replace_na(list(ChronicConditions = "None", y = "unknown"))%>%
   select(pbp_a_hnumber,pbp_a_plan_identifier...2,pbp_a_segment_id,
          pbp_a_plan_geog_name,pbp_a_plan_name,pbp_a_est_memb,
          SNP,SNPType,TYPE,ChronicConditions,pbp_a_org_name,pbp_a_org_marketing_name,pbp_a_plan_name)%>%
@@ -342,6 +436,7 @@ BenefitInfo <- read_delim(Meal_Info, delim = "\t", escape_double = FALSE,
         # ,pbp_b13c_refer_yn
          ,pbp_b13c_maxplan_per #Select Maximum Plan Benefit Coverage periodicity:
         )%>%
+  mutate(segment_id=str_pad(segment_id, 3, pad = "0"))%>%#PAD SEGMENT ID WITH 2 LEADING ZEROES
   mutate(CPBP=paste0(pbp_a_hnumber,"_",pbp_a_plan_identifier,"_",segment_id),
          LINK=str_c(pbp_a_hnumber,pbp_a_plan_identifier,sep = "_"),
          Meals=if_else(pbp_b13c_bendesc_service==1,"Yes","No"),
@@ -364,46 +459,86 @@ BenefitInfo <- read_delim(Meal_Info, delim = "\t", escape_double = FALSE,
          -pbp_b13c_bendesc_amo)
 
 FullBenefitInfo <- BenefitInfo %>%
-  left_join(PlanLevelEnrollment,by = c("LINK"))%>%
+  left_join(PlanLevelEnrollment,by = c("LINK"))%>%##PLAN LEVEL ENROLLMENT DATA FRAME ONLY EXCLUDES DRUG PLANS
   left_join(SectionA,by = c("LINK"))%>%
   #filter(Type=="MAPD")%>%
-  distinct(CPBP, .keep_all = T)%>%
+  #distinct(CPBP, .keep_all = T)%>%#IF I USE THIS I GET DIFFERENT SEGMENTS, BUT DUP ENROLLMENT
+  distinct(LINK, .keep_all = T)%>%#TRY TO REMOVE DUPLICATES LIKE THIS
   replace_na(list(SNPType = "Not SNP", ChronicConditions = "None",
                   Meals="No",Benefit="None",BenefitType="None",
                   Period="Unknown"))%>%
-  select(-pbp_a_hnumber.y,-pbp_a_plan_identifier...2,-pbp_a_segment_id)
+  select(-pbp_a_hnumber.y,-pbp_a_plan_identifier...2,-pbp_a_segment_id,-TYPE)#%>%
+  #select(contract_id,plan_id,snp_plan,eghp,Meals,PlanType,SNP,SNPType)
 
-DuplicateCheck <- BenefitInfo2%>% group_by(CPBP)%>% summarize(n=n())%>%filter(n>1)%>%arrange(-n)
+#One Specific Plan
+minPlanInfo <- FullBenefitInfo %>% 
+    select(organization_marketing_name,organization_name,parent_organization)%>%
+  distinct(.keep_all = T)
+setwd
+#write.csv(minPlanInfo,"C:/Users/eyankowski/OneDrive - momsmeals.com\\MM\\CMS\\Output/PlanLookUpInfo.csv",row.names = F)
+
+
+bh <- FullBenefitInfo %>% 
+  filter(organization_marketing_name=='Priority Health Medicare')%>%
+  select(organization_marketing_name,plan_name,parent_organization,Meals,
+         contract_id,plan_id,TotalMembers,snp_plan,eghp,Benefit,PlanType,
+         pbp_a_plan_geog_name,pbp_a_est_memb)
+
+FullBenefitDuplicates <- FullBenefitInfo %>%
+  group_by(LINK)%>%
+  summarize(n=n())%>%
+  filter(n>1)
+
+EligibleOverall <- FullBenefitInfo %>%
+  #filter(pbp_a_org_name!='BRANDMAN HEALTH PLAN')%>%
+  group_by(Meals)%>%
+  summarise(Membership=sum(TotalMembers, na.rm = T),
+            PlanCount=n())%>%
+  adorn_totals()
+
+#DuplicateCheck <- BenefitInfo2%>% group_by(CPBP)%>% summarize(n=n())%>%filter(n>1)%>%arrange(-n)
 
 ```
 
 ```{r Overall Numbers, echo=F, message=F}
 
-Membership.Individual <- FullBenefitInfo %>%
-  filter(SNP!='No')%>%
+Membership.MAPD <- FullBenefitInfo %>% #Membership of all MA Plans
+  filter(PlanType=='MAPD')%>%
   group_by(Meals)%>%
   summarise(Plans=n(),
             Enrollment=sum(TotalMembers, na.rm = T))%>%
   mutate(Perc.enrollment=Enrollment/sum(Enrollment),
-         Perc.plans=Plans/sum(Plans))
+         Perc.plans=Plans/sum(Plans))%>%
+  adorn_totals()
 
-Membership.SNP <- FullBenefitInfo %>%
-  filter(SNP=='Yes')%>%
+# Membership.Individual <- FullBenefitInfo %>%
+#   filter(SNP!='No')%>%
+#   group_by(Meals)%>%
+#   summarise(Plans=n(),
+#             Enrollment=sum(TotalMembers, na.rm = T))%>%
+#   mutate(Perc.enrollment=Enrollment/sum(Enrollment),
+#          Perc.plans=Plans/sum(Plans))%>%
+#   adorn_totals()
+
+Membership.SNP <- FullBenefitInfo %>% #Membership of all SNP Plans
+  filter(PlanType=='SNP')%>%
   group_by(Meals)%>%
   summarise(Plans=n(),
             Enrollment=sum(TotalMembers, na.rm = T))%>%
   mutate(Perc.enrollment=Enrollment/sum(Enrollment),
-         Perc.plans=Plans/sum(Plans))
+         Perc.plans=Plans/sum(Plans))%>%
+  adorn_totals()
 
-Membership.Group <- FullBenefitInfo %>%
+Membership.Group <- FullBenefitInfo %>% #Membership of all Group Plans
   filter(PlanType=='Group')%>%
   group_by(Meals)%>%
   summarise(Plans=n(),
             Enrollment=sum(TotalMembers, na.rm = T))%>%
   mutate(Perc.enrollment=Enrollment/sum(Enrollment),
-         Perc.plans=Plans/sum(Plans))
+         Perc.plans=Plans/sum(Plans))%>%
+  adorn_totals()
 
-MAPD.Plan <- FullBenefitInfo %>%
+MAPD.Plan <- FullBenefitInfo %>% #eligibility by MA USE IN DOC
   drop_na(Meals)%>%
   filter(PlanType=='MAPD')%>%
   group_by(parent_organization,Meals)%>%
@@ -411,7 +546,23 @@ MAPD.Plan <- FullBenefitInfo %>%
   pivot_wider(names_from = Meals,values_from = Enrollment,values_fill = 0)%>%
   mutate(Total=Yes+No,
          Eligible=round(Yes/Total,4))%>%
-  arrange(-Total)
+  arrange(-Total)%>%
+  adorn_totals()
+
+#write.table(MAPD.Plan, "clipboard", sep="\t", row.names=FALSE, col.names=TRUE)
+
+SNP.Plan <- FullBenefitInfo %>% #eligibility by SNP Plans USE IN DOC
+  drop_na(Meals)%>%
+  filter(PlanType=='SNP')%>%
+  group_by(parent_organization,Meals)%>%
+  summarise(Enrollment=sum(TotalMembers, na.rm = T))%>%
+  pivot_wider(names_from = Meals,values_from = Enrollment,values_fill = 0)%>%
+  mutate(Total=Yes+No,
+         Eligible=round(Yes/Total,4))%>%
+  arrange(-Total)%>%
+  adorn_totals()
+
+#write.table(SNP.Plan, "clipboard", sep="\t", row.names=FALSE, col.names=TRUE)
 
 TypeOfPlan  <- FullBenefitInfo %>%
   #drop_na(Meals)%>%
@@ -438,23 +589,228 @@ SNPSummary <- FullBenefitInfo %>%
   group_by(SNPType,Meals)%>%
   summarise(Enrollment=sum(TotalMembers, na.rm = T))%>%
   pivot_wider(names_from = Meals,values_from = Enrollment,values_fill = 0)%>%
-  mutate(Total=Yes+No,
-         Eligible=round(Yes/Total,4))%>%
-  arrange(-Total)
+  mutate(Total=Yes+No)%>%
+  arrange(-Total)%>%
+  adorn_totals()%>%
+  mutate(Eligible=round(Yes/Total,4))
 
+SNPSummary.ByPlan <- FullBenefitInfo %>%
+  filter(parent_organization=='UnitedHealth Group, Inc.')%>%
+  drop_na(Meals)%>%
+  group_by(SNPType,Meals)%>%
+  summarise(Enrollment=sum(TotalMembers, na.rm = T))%>%
+  pivot_wider(names_from = Meals,values_from = Enrollment,values_fill = 0)%>%
+  mutate(Total=Yes+No)%>%
+  arrange(-Total)%>%
+  adorn_totals()%>%
+  mutate(Eligible=round(Yes/Total,4))
 
 ```
 
+```{r County Population echo=F, message=F}
+#From C:\Users\eyankowski\Dropbox (PurFoods)\Sales Mgmt\Sales Analyst\CMSMarketResearch\2020\PBP_Benefits_2020_v3.R
+#eligible by county overall
+County_SNP
+
+County_MA
+
+#join Meal info with CPSC Info FROM OLD SCRIPT
+# FullInfo.non_eghp <- mealInfo.pbp13 %>%
+#   full_join(PlanEnrollment, by=c("LINK"="LINK"))%>% #join to get Monthly Enrollment
+#   full_join(Section_A, by=c("LINK"="LINK"))%>%      #join to get new plans
+#   filter(orgtype!=10& eghp!="Yes" & organization_type!="National PACE")%>%               #remove prescription drug plans, employee group health plans and national PACE plans
+#   distinct(LINK, .keep_all = T)%>%#removes all duplicates
+#   mutate(MealBenefit=if_else(pbp_b13c_max_meals>0,"Yes","No","No")) #MealBenefit
+
+FullInfo_NONEGHP <- FullBenefitInfo%>%
+  select(LINK,CPBP,Meals,BenefitType,TotalMembers,organization_name,organization_marketing_name,parent_organization,PlanType,ChronicConditions,SNPType,pbp_a_org_marketing_name,pbp_a_org_name,pbp_a_plan_geog_name)%>%
+  full_join(CPSC_Enrollment_Info)%>%
+  filter(PlanType %in% c('MAPD','Group','SNP'))%>%
+  filter(enrollment>0)
+
+ByPlanByState <- FullInfo_NONEGHP %>%
+  group_by(parent_organization,state,Meals)%>%
+  summarize(AprilEnrollment=sum(enrollment,na.rm = T))%>%
+  pivot_wider(names_from = Meals,values_from = AprilEnrollment,values_fill = 0)%>%
+  mutate(StateEnrollment=Yes+No,
+         StateEligible=round(Yes/StateEnrollment,2))%>%
+  rename(`Eligible For Meals`=Yes,
+         `Not Eligible`=No)
+
+ByState <- FullInfo_NONEGHP %>%
+  group_by(state,Meals)%>%
+  summarize(AprilEnrollment=sum(enrollment,na.rm = T))%>%
+  pivot_wider(names_from = Meals,values_from = AprilEnrollment,values_fill = 0)%>%
+  mutate(StateEnrollment=Yes+No,
+         StateEligible=round(Yes/StateEnrollment,2))%>%
+  rename(`Eligible For Meals`=Yes,
+         `Not Eligible`=No)
+
+
+#Total September Enrollment 
+FullMA_SNP_StateEnrollment <- CPSC_Enrollment_Info %>%
+  left_join(CPSC_Contract_Info, by=c("LINK"="LINK"))%>%
+  filter(plan_type %!in% c('Medicare Prescription Drug Plan','National PACE',
+                           'Medicare-Medicaid Plan HMO/HMOPOS','Employer/Union Only Direct Contract PDP'))%>%
+  filter(eghp!="Yes")%>%
+  group_by(state,county,fips_state_county_code,LINK)%>%
+  summarise(TotalMembers=sum(enrollment))
+
+
+#join Meal info with CPSC Info
+FullInfo.non_eghp <- mealInfo.pbp13 %>%
+  full_join(PlanEnrollment, by=c("LINK"="LINK"))%>% #join to get Monthly Enrollment
+  full_join(Section_A, by=c("LINK"="LINK"))%>%      #join to get new plans
+  filter(orgtype!=10& eghp!="Yes" & organization_type!="National PACE")%>%               #remove prescription drug plans, employee group health plans and national PACE plans
+  distinct(LINK, .keep_all = T)%>%#removes all duplicates
+  mutate(MealBenefit=if_else(pbp_b13c_max_meals>0,"Yes","No","No")) #MealBenefit
+
+
+
+WithBenefitByCountyByPlan <- FullInfo.non_eghp %>% 
+  select(LINK,MealBenefit,pbp_b13c_days,pbp_b13c_max_meals,snp_plan,organization_name,
+         organization_marketing_name,plan_name,parent_organization,pbp_a_plan_geog_name)%>%
+  left_join(StateEnrollment)
+
+TotalsEligibleByCounty <- WithBenefitByCountyByPlan %>%
+  drop_na(fips_state_county_code)%>%
+  filter(MealBenefit=="Yes")%>%
+  group_by(fips_state_county_code)%>%
+  summarise(Eligible=sum(TotalMembers))%>%
+  mutate(region=as.numeric(fips_state_county_code),
+         value=Eligible)
+
+TotalsEligibleByPlan <- WithBenefitByCountyByPlan %>%
+  drop_na(fips_state_county_code)%>%
+  filter(MealBenefit=="Yes")%>%
+  group_by(parent_organization)%>%
+  summarise(Eligible=sum(TotalMembers))
+
+RemoveAll0 <- TotalsEligibleByCounty %>%
+  filter(Eligible>0)
+
+TotalsEligibleByCountyByPlan <- WithBenefitByCountyByPlan %>%
+  drop_na(fips_state_county_code)%>%
+  filter(MealBenefit=="Yes")%>%
+  group_by(parent_organization, fips_state_county_code)%>%
+  summarise(Eligible=sum(TotalMembers))%>%
+  mutate(region=as.numeric(fips_state_county_code),
+         value=Eligible)
+
+library(choroplethr)
+library(choroplethrMaps)
+county_choropleth(RemoveAll0)
+
+plan_OrgNames <- FullInfo.non_eghp %>%
+  select(parent_organization,organization_marketing_name)%>% 
+  distinct()%>%
+  mutate(Same=if_else(parent_organization == organization_marketing_name,"Match","Different"))
+
+
+#Employee Group Health Plans
+FullInfo.eghp <- mealInfo.pbp13 %>%
+  full_join(PlanEnrollment, by=c("LINK"="LINK"))%>% #join to get Monthly Enrollment
+  full_join(Section_A, by=c("LINK"="LINK"))%>%      #join to get new plans
+  filter(orgtype!=10) #remove prescription drug plans
+
+plan_types <- FullInfo %>%
+  group_by(plan_type)%>%
+  summarize(n=n())%>%
+  drop_na(plan_type)%>%
+  arrange(desc(n))
+
+org_types <- FullInfo %>%
+  group_by(organization_type)%>%
+  summarize(n=n())%>%
+  drop_na(organization_type)%>%
+  arrange(desc(n))
+
+#State Map Iteration
+library(choroplethr)
+library(choroplethrMaps)
+library(scales)
+
+data("state.regions")
+TotalsEligibleByParentOrganization <- WithBenefitByCountyByPlan %>%
+  drop_na(fips_state_county_code)%>%
+  filter(MealBenefit=="Yes")%>%
+  group_by(parent_organization)%>%
+  summarise(Eligible=sum(TotalMembers))%>%
+  arrange(-Eligible)
+  
+  # WithBenefitByCountyByPlan %>%
+  # drop_na(fips_state_county_code)%>%
+  # filter(MealBenefit=="Yes")%>%
+  # group_by(state) %>%
+  # summarise(Eligible=sum(TotalMembers))%>%
+  # filter(Eligible>0)%>%
+  # left_join(state.regions, by=c("state"="abb"))%>%
+  # mutate(value=Eligible)
+
+TotalsEligibleByState.plan <- WithBenefitByCountyByPlan %>%
+  drop_na(fips_state_county_code)%>%
+  filter(MealBenefit=="Yes")%>%
+  group_by(parent_organization,state) %>%
+  summarise(Eligible=sum(TotalMembers))%>%
+  filter(Eligible>0)%>%
+  left_join(state.regions, by=c("state"="abb"))%>%
+  mutate(value=Eligible)
+
+planNames <- TotalsEligibleByState.plan %>%
+  select(parent_organization)%>%
+  distinct(parent_organization)%>%
+  left_join(TotalsEligibleByParentOrganization)%>%
+  arrange(-Eligible)
+
+planName.v1 <- head(planNames,50)
+planName.v <- as.vector(planName.v1$parent_organization)
+
+setwd("C:/TEMP")
+for(y in seq_along(planName.v)) {
+ planName <- TotalsEligibleByState.plan%>% filter(parent_organization==planName.v[y])
+ 
+ #jpeg(paste(planName.v[y],"MAP.jpg",sep = "_"))
+ state_choropleth(planName, num_colors = 1,
+                  title = paste("2020 MA Eligible Members of",planName.v[y]),
+                  legend="Eligble Members")+
+  scale_fill_gradient(low="#fee8c8", high="#e34a33", name = "Trade Value", labels = comma) +
+  guides(fill=guide_colorbar(title="MEMBERS"))+
+  theme(legend.position = 'right', text = element_text(family = "Bookman",size = 12),
+        plot.title = element_text(color = "gray25", size=20,hjust = 0.5),
+        plot.subtitle = element_text(size = 18, hjust = 0.5),
+        plot.caption = element_text(color = "gray30",size = 14))
+  
+ ggsave(file=paste(planName.v[y],"2020Members.pdf",sep = "_"),width = 10,height = 6)
+ }
+
+gg <- state_choropleth(TotalsEligibleByState,num_colors = 1)
+gg + scale_fill_gradient(low="#fee8c8", high="#e34a33", name = "Trade Value", labels = comma) +
+  guides(fill=guide_colorbar(title="MEMBERS")) +ggtitle("Eligible Members") +
+  theme(legend.position = 'right', text = element_text(family = "Bookman",size = 12),
+        plot.title = element_text(color = "gray25", size=28,hjust = 0.5),
+        plot.subtitle = element_text(size = 18, hjust = 0.5),
+        plot.caption = element_text(color = "gray30",size = 14))
+
+```
+
+
+
+
 # 2022 STARS Ratings
 
-The STARS Ratings data is sourced from 
-<https://www.cms.gov/Medicare/Prescription-Drug-Coverage/PrescriptionDrugCovGenIn/PerformanceData>.  
+
 
 ### **Pieces to Inspect a bit more**
 
 SNP = YES does mean dual. Would need to do a bit of a cross check to ensure that no dual plan shares a H number with a traditional MA plan.
 For the sake of looking at STAR ratings, we are only focused on the C or overall measures. D is specifically drug measures.
 
+
+##### STARS RATINGS <https://www.cms.gov/medicare/prescription-drug-coverage/prescriptiondrugcovgenin/performancedata.html
+The STARS Ratings data is sourced from 
+<https://www.cms.gov/Medicare/Prescription-Drug-Coverage/PrescriptionDrugCovGenIn/PerformanceData>.  
+
+The MA star ratings data are available as part of the Part C and D Performance Data. The data are not in a good analytical format and the variable names differ over time. In the associated code files, I've renamed variables so that sufficiently similar data are given the same name across all years of data
 
 ```{r STARS Ratings, echo=FALSE, message=FALSE}
 y <- 2021 ## Year 
@@ -465,15 +821,18 @@ STARS.Path   <- paste0(STARS.Path,"2022 Star Ratings Data Table - Summary Rating
 
 Star_Ratings <- read_csv(STARS.Path,skip = 1)%>%
   clean_names()%>%
-  select(1:6,9:11)
+  select(1:6,9,11)%>%
+  rename(partC_2022_Summary=x2022_part_c_summary,
+         overall_2022_Summary=x2022_overall)
+  
 
 
 ```
 
 ```{r County Penetration, echo=FALSE, message=FALSE}
 
-y <- 2021 ## Year 
-m <- "10" ## Month of Enrollment
+y <- 2022 ## Year 
+m <- "04" ## Month of Enrollment
 
 InitialPenetration.Path <- paste0("C:/Users/eyankowski/OneDrive - momsmeals.com\\MM\\CMS\\State_County_Penetration","\\","State_County_Penetration_MA_",y,"_",m,"\\")
 Penetration.Path   <- paste0(InitialPenetration.Path,"State_County_Penetration_MA_",y,"_",m,".csv") 
@@ -486,12 +845,19 @@ CountyPenetration <- read_csv(Penetration.Path,
   filter(state_name!='Pending State Designation')%>%
   mutate(PenetrationPerc=enrolled/eligibles)
 
+state_penetration <- CountyPenetration %>%
+  group_by(state_name)%>%
+  summarize(eligible=sum(eligibles,na.rm = T),
+            enrollees=sum(enrolled,na.rm = T))%>%
+  mutate(StPen=round(enrollees/eligible,2))
+
 ```
 
 ```{r MACVAT Creation, echo=F,message=F}
 
 CPSC_Members <- CPSC_Enrollment_Info %>%
-  filter(enrollment>0)
+  filter(enrollment>0)%>%
+  drop_na(fips_state_county_code)
 
 MACVAT <- FullBenefitInfo %>%
   filter(TYPE=='MA')%>%
@@ -502,6 +868,7 @@ MACVAT <- FullBenefitInfo %>%
   select(HPLAN=pbp_a_hnumber.x,`plan_id`=pbp_a_plan_identifier,
          segment_id,
          CPBP,LINK,Meals,BenefitType,Benefit,`PlanMembers`=TotalMembers,
+         pbp_a_plan_name,
          pbp_a_org_name,
          organization_name,
           pbp_a_org_marketing_name,
@@ -512,7 +879,10 @@ MACVAT <- FullBenefitInfo %>%
          SNP,SNPType,TYPE,ChronicConditions,ssa_state_county_code,
          fips_state_county_code,state,county,`county_enrollment`=enrollment)%>%
   left_join(Star_Ratings,by = c("HPLAN"="contract_number"))%>%
-  left_join(CountyPenetration,by = c("ssa_state_county_code"="ssa"))
+  left_join(CountyPenetration,by = c("ssa_state_county_code"="ssa"))%>%
+  select(-snp)%>%
+  mutate(RemoveDUP=str_c(LINK,ssa_state_county_code,sep = "_"))%>%
+  distinct(RemoveDUP,.keep_all = T)
         
 test1 <- MACVAT %>%
   filter(CPBP=='H0022_001_0')
